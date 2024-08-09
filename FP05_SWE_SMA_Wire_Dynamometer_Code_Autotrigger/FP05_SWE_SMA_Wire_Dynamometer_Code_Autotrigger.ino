@@ -23,9 +23,6 @@ int pulse_count = 0; // Variable for keeping track of number of data points coll
 // Arrays for storing data
 int enc_pos_arr[1000];
 int time1[1000];
-// int time2[1000];   //DEBUG CODE
-// int A_read[1000];  //DEBUG CODE
-// int B_read[1000];  //DEBUG CODE
 int LC_read[1000];
 int SMA_read[1000];
 int Shunt_read[1000];
@@ -41,12 +38,9 @@ int max_power_time_us = MAX_POWER_TIME_MS * 1000;
 // Variables for shutdown protocol
 bool stop = false;
 int num_left = 0;
-// int issue = 0;   //DEBUG CODE
 
 void readAnalogs() { // stores data for the encoder position, force, current, voltage, and if the MOSFET is triggered
   enc_pos_arr[pulse_count] = enc_pos;
-  // A_read[pulse_count] = Asig;    // DEBUG CODE
-  // B_read[pulse_count] = Bsig;    // DEBUG CODE
   LC_read[pulse_count] = analogRead(LC_pin);
   SMA_read[pulse_count] = analogRead(SMA_pin);
   Shunt_read[pulse_count] = analogRead(Shunt_pin);
@@ -78,14 +72,6 @@ bool IRAM_ATTR TimerCallbackFunction(void* timerNum) { // Timer interrupt functi
       MOS_triggered = true; // turn on the MOSFET
       digitalWrite(MOS_Trig_pin, HIGH);
       time1[pulse_count] = micros(); // Note the time so another data point can be collected within the interrupt function
-
-      // DEBUG CODE
-      // Serial.print("Mosfet Triggered\t");
-      // Serial.print(micros());
-      // Serial.print("\t");
-      // Serial.println(time1[pulse_count]);
-      // Serial.print("\t");
-      // Serial.println(time1[pulse_count-1] % time_btwn_pulses_us);
     }
     if (MOS_triggered == true && (time1[pulse_count] % time_btwn_pulses_us) >= max_power_time_us) {
       // IF the MOSFET is on and the amount of time it has been on is longer than the max amount of time the MOSFET is supposed to be on for:
@@ -96,14 +82,7 @@ bool IRAM_ATTR TimerCallbackFunction(void* timerNum) { // Timer interrupt functi
       detachInterrupt(B_pin);
       readAnalogs(); // Collect data and update the number of data points collected
       increment_pulse_count(); 
-      // time2[pulse_count] = micros();   // DEBUG CODE
       num_left = 3; // Start program shutdown
-
-      // DEBUG CODE
-      // Serial.print(micros());
-      // Serial.print("\t");
-      // Serial.println(time1[pulse_count] % time_btwn_pulses_us);
-      // Serial.println((time1[pulse_count] % time_btwn_pulses_us) >= max_power_time_us);
     }
 
     if ((((time1[pulse_count] - prev_time) >= PASSIVE_DATA_INTERVAL_US) && MOS_triggered == false) || (MOS_triggered == true && ((time1[pulse_count] - prev_time) >= (ACTIVE_DATA_INTERVAL_US - 1)))) {
@@ -111,15 +90,12 @@ bool IRAM_ATTR TimerCallbackFunction(void* timerNum) { // Timer interrupt functi
       // OR IF the MOSFET is on and the amount of time since the last data point was collected is longer than the specified amount of time
       
       readAnalogs(); // Collect data and indicate that a data point has been collected
-      // time2[pulse_count] = micros();   // DEBUG CODE
       increment_pulse_count();
-      // issue+=10;     // DEBUG CODE
       if (num_left != 0) {
         // If the shutdown protocol has been triggered, takes a few more data points before shutting down completely
         num_left--;
         if (num_left == 1) {
           stop = true; // Stop collecting data
-          // Serial.print(issue);   // DEBUG CODE
           // Tell the user that the program is shut down
           Serial.println("\nSomething went wrong. Power was being delivered to the SMA for too long. Shutting down the program.");
         }
@@ -136,7 +112,6 @@ void IRAM_ATTR Achange() { // Interrupt function for the Encoder A signal
   Asig = digitalRead(A_pin); // Note whether the signal is high or low
   if (Asig != Aprev) { 
     // IF the signal is actually different from the previous one, sometimes the interrupt gets triggered when there is no change in the signal
-    // A_read[pulse_count] = Asig;    // DEBUG CODE
     if (Asig == 0) { // Increase or decrease the encoder's position depending on the signal change
       if (Bsig == 0) {
         enc_pos--;
@@ -154,8 +129,6 @@ void IRAM_ATTR Achange() { // Interrupt function for the Encoder A signal
       // IF the MOSFET is triggered and the encoder has reached the location to turn off the MOSFET: 
       MOS_triggered = false; // Turn off the MOSFET
       digitalWrite(MOS_Trig_pin, LOW);
-      // Serial.print("Mosfet Untriggered ");   // DEBUG CODE
-      // Serial.println(time1[pulse_count]);    // DEBUG CODE
     }
     readAnalogs(); // Collect data, keep track of what the A signal is and update the number of data points collected.
     // time2[pulse_count] = micros();
@@ -168,7 +141,6 @@ void IRAM_ATTR Bchange() { // Essentially the same as the Encoder A pin interrup
   time1[pulse_count] = micros();
   Bsig = digitalRead(B_pin);
   if (Bsig != Bprev) {
-    // B_read[pulse_count] = Bsig;    // DEBUG CODE
     if (Bsig == 0) {
       if (Asig == 0) {
         enc_pos++;
@@ -185,11 +157,8 @@ void IRAM_ATTR Bchange() { // Essentially the same as the Encoder A pin interrup
     if (enc_pos >= FULL_CONTRACTION_POSITION && MOS_triggered == true) {
       MOS_triggered = false;
       digitalWrite(MOS_Trig_pin, LOW);
-      // Serial.print("Mosfet Untriggered ");   // DEBUG CODE
-      // Serial.println(time1[pulse_count]);    // DEBUG CODE
     }
     readAnalogs();
-    // time2[pulse_count] = micros();   // DEBUG CODE
     Bprev = Bsig;
     increment_pulse_count();
   }
@@ -222,7 +191,6 @@ void setup() {
   Bsig = digitalRead(B_pin);
   time1[pulse_count] = micros();
   readAnalogs();
-  // time2[pulse_count] = micros();   // DEBUG CODE
   pulse_count = 1;
   Aprev = Asig;
   Bprev = Bsig;
@@ -266,25 +234,11 @@ void loop() { // All that happens in the loop is that data is printed to the Ser
     Print_str.concat("\t");
     Print_str.concat(enc_pos_arr[ctr]);
     Print_str.concat("\t");
-
-    // DEBUG CODE
-    // Print_str.concat(A_read[ctr]);
-    // Print_str.concat("\t");
-    // Print_str.concat(B_read[ctr]);
-    // Print_str.concat("\t");
-
     Print_str.concat(LC_read[ctr]); // Add the force, current, and voltage readings to the string
     Print_str.concat("\t");
     Print_str.concat(Shunt_read[ctr]);
     Print_str.concat("\t");
     Print_str.concat(SMA_read[ctr]);
-
-    // DEBUG CODE
-    // Print_str.concat("\t");
-    // Print_str.concat(time2[ctr]);
-    // Print_str.concat("\t");
-    // Print_str.concat(ctr);
-    
     Print_str.concat("\t");
     Print_str.concat(MOS_trig_arr[ctr]); // Add whether or not the MOSFET is triggered
     Print_str.concat("\n");
